@@ -49,18 +49,12 @@ namespace lspd {
     void InstallArtHooks(void *art_handle);
 
     void InstallInlineHooks() {
-        if (installed) {
+        if (installed) [[unlikely]] {
             LOGI("Inline hooks have been installed, skip");
             return;
         }
         installed = true;
         LOGI("Start to install inline hooks");
-        int api_level = GetAndroidApiLevel();
-        if (UNLIKELY(api_level < __ANDROID_API_L__)) {
-            LOGE("API level not supported: %d, skip inline hooks", api_level);
-            return;
-        }
-        LOGI("Using api level %d", api_level);
         InstallRiruHooks();
         // install ART hooks
         InstallArtHooks(handle_libart);
@@ -68,7 +62,7 @@ namespace lspd {
     }
 
     void InstallArtHooks(void *art_handle) {
-        if (art_hooks_installed) {
+        if (art_hooks_installed) [[unlikely]] {
             return;
         }
         art::hidden_api::DisableHiddenApi(art_handle);

@@ -127,7 +127,7 @@ namespace lspd {
     }
 
     void InitSymbolCache() {
-        if (UNLIKELY(sym_initialized)) return;
+        if (sym_initialized) [[unlikely]] return;
         LOGD("InitSymbolCache");
         auto linker = SandHook::ElfImg(kLinkerPath.c_str());
         auto libc = SandHook::ElfImg(kLibcPath.c_str());
@@ -141,7 +141,7 @@ namespace lspd {
                           (sym_get_property = reinterpret_cast<void *>(libbase.getSymbAddress(
                                   "_ZN7android4base11GetPropertyERKNSt3__112basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEES9_"))) &&
                           soinfo::setup(linker) && (handle_libart = findLibArt());
-        if (UNLIKELY(!sym_initialized)) {
+        if (!sym_initialized) [[unlikely]] {
             LOGE("Init symbol cache failed");
         }
     }

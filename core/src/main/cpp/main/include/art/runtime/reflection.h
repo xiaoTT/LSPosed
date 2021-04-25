@@ -30,8 +30,8 @@ namespace art {
             bool, VerifyAccess,
             (void * obj, void * declaring_class, uint32_t access_flags, void * calling_class), {
                 auto calling_desc = art::mirror::Class(calling_class).GetDescriptor();
-                if (UNLIKELY(calling_desc.find("de/robv/android/xposed/LspHooker") !=
-                             std::string::npos)) {
+                if (calling_desc.find("de/robv/android/xposed/LspHooker") !=
+                             std::string::npos) [[unlikely]] {
                     return true;
                 }
                 return backup(obj, declaring_class, access_flags, calling_class);

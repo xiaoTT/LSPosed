@@ -41,11 +41,7 @@ template <typename T, size_t N>
 char(&ArraySizeHelper(T(&array)[N]))[N];  // NOLINT(readability/casting)
 #define arraysize(array) (sizeof(ArraySizeHelper(array)))
 #define SIZEOF_MEMBER(t, f) sizeof(std::declval<t>().f)
-// Changing this definition will cause you a lot of pain.  A majority of
-// vendor code defines LIKELY and UNLIKELY this way, and includes
-// this header through an indirect path.
-#define LIKELY( exp )       (__builtin_expect( (exp) != 0, true  ))
-#define UNLIKELY( exp )     (__builtin_expect( (exp) != 0, false ))
+
 #define WARN_UNUSED __attribute__((warn_unused_result))
 // A deprecated function to call to create a false use of the parameter, for
 // example:

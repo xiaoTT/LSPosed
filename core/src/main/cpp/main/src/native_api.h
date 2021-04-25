@@ -38,7 +38,7 @@ struct LsposedNativeAPIEntriesV1 {
 };
 
 namespace lspd {
-    void InstallNativeAPI();
+    bool InstallNativeAPI();
     void RegisterNativeLib(const std::string& library_name);
 }
 
