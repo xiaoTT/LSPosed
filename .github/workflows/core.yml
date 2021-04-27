@@ -58,6 +58,7 @@ jobs:
         ccache -o hash_dir=false
     - name: Build with Gradle
       run: |
+        echo '84831b9409646a918e30573bab4c9c91346d8abd' > ${ANDROID_HOME}/licenses/android-sdk-preview-license
         echo 'org.gradle.caching=true' >> gradle.properties
         echo 'org.gradle.parallel=true' >> gradle.properties
         echo 'org.gradle.vfs.watch=true' >> gradle.properties
