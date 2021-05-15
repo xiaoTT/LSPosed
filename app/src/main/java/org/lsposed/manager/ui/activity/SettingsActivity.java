@@ -45,6 +45,7 @@ import androidx.preference.SwitchPreference;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.snackbar.Snackbar;
+import com.takisoft.preferencex.PreferenceCategory;
 import com.takisoft.preferencex.PreferenceFragmentCompat;
 
 import org.lsposed.manager.BuildConfig;
@@ -286,14 +287,31 @@ public class SettingsActivity extends BaseActivity {
                 });
             }
 
+            PreferenceCategory prefGroupSystem = findPreference("settings_group_system");
             SwitchPreference prefShowHiddenIcons = findPreference("show_hidden_icon_apps_enabled");
-            if (prefShowHiddenIcons != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+            if (prefGroupSystem != null && prefShowHiddenIcons != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
                     && requireActivity().checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED) {
+                prefGroupSystem.setVisible(true);
                 prefShowHiddenIcons.setVisible(true);
                 prefShowHiddenIcons.setChecked(Settings.Global.getInt(
                         requireActivity().getContentResolver(), "show_hidden_icon_apps_enabled", 1) != 0);
                 prefShowHiddenIcons.setOnPreferenceChangeListener((preference, newValue) -> Settings.Global.putInt(requireActivity().getContentResolver(),
                         "show_hidden_icon_apps_enabled", (boolean) newValue ? 1 : 0));
+            }
+
+            SwitchPreference prefFollowSystemAccent = findPreference("follow_system_accent");
+            if (prefFollowSystemAccent != null && (Build.VERSION.SDK_INT >= 31 || Build.VERSION.SDK_INT == 30 && Build.VERSION.PREVIEW_SDK_INT != 0)) {
+                if (primary_color != null) {
+                    primary_color.setVisible(!prefFollowSystemAccent.isChecked());
+                }
+                prefFollowSystemAccent.setVisible(true);
+                prefFollowSystemAccent.setOnPreferenceChangeListener((preference, newValue) -> {
+                    SettingsActivity activity = (SettingsActivity) getActivity();
+                    if (activity != null) {
+                        activity.restart();
+                    }
+                    return true;
+                });
             }
         }
 

@@ -35,6 +35,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.os.UserHandle;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
@@ -58,6 +59,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.SearchView;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.request.target.CustomTarget;
@@ -97,6 +99,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
     private final ModuleUtil moduleUtil;
 
     private final ModuleUtil.InstalledModule module;
+    private final UserHandle userHandle;
 
     private final HashSet<ApplicationWithEquals> recommendedList = new HashSet<>();
     private final HashSet<ApplicationWithEquals> checkedList = new HashSet<>();
@@ -131,9 +134,10 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
     private boolean refreshing = false;
     private boolean enabled = true;
 
-    public ScopeAdapter(AppListActivity activity, ModuleUtil.InstalledModule module) {
+    public ScopeAdapter(AppListActivity activity, ModuleUtil.InstalledModule module, UserHandle userHandle) {
         this.activity = activity;
         this.module = module;
+        this.userHandle = userHandle;
         moduleUtil = ModuleUtil.getInstance();
         HandlerThread handlerThread = new HandlerThread("appList");
         handlerThread.start();
@@ -150,6 +154,9 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
     }
 
     private boolean shouldHideApp(PackageInfo info, ApplicationWithEquals app) {
+        if (app.userId != module.userId) {
+            return true;
+        }
         if (info.packageName.equals(this.module.packageName)) {
             return true;
         }
@@ -163,7 +170,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
             return false;
         }
         if (preferences.getBoolean("filter_modules", true)) {
-            if (info.applicationInfo.metaData != null && info.applicationInfo.metaData.containsKey("xposedmodule")) {
+            if (info.applicationInfo.metaData != null && info.applicationInfo.metaData.containsKey("xposedminversion")) {
                 return true;
             }
         }
@@ -250,9 +257,9 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
             item.setChecked(!item.isChecked());
             preferences.edit().putBoolean("filter_modules", item.isChecked()).apply();
         } else if (itemId == R.id.menu_launch) {
-            Intent launchIntent = AppHelper.getSettingsIntent(module.packageName, pm);
+            Intent launchIntent = AppHelper.getSettingsIntent(module.packageName, module.userId, pm);
             if (launchIntent != null) {
-                activity.startActivity(launchIntent);
+                AppHelper.startActivityAsUser(activity, launchIntent, userHandle);
             } else {
                 activity.makeSnackBar(R.string.module_no_ui, Snackbar.LENGTH_LONG);
             }
@@ -285,7 +292,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
         if (itemId == R.id.menu_launch) {
             Intent launchIntent = pm.getLaunchIntentForPackage(info.packageName);
             if (launchIntent != null) {
-                activity.startActivity(launchIntent);
+                AppHelper.startActivityAsUser(activity, launchIntent, userHandle);
             }
         } else if (itemId == R.id.menu_compile_speed) {
             CompileDialogFragment.speed(activity.getSupportFragmentManager(), info);
@@ -299,7 +306,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
                 e.printStackTrace();
             }
         } else if (itemId == R.id.menu_app_info) {
-            activity.startActivity(new Intent(ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", info.packageName, null)));
+            AppHelper.startActivityAsUser(activity, new Intent(ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", info.packageName, null)), userHandle);
         } else if (itemId == R.id.menu_force_stop) {
             if (info.packageName.equals("android")) {
                 ConfigManager.reboot(false, null, false);
@@ -319,7 +326,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
 
     public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         inflater.inflate(R.menu.menu_app_list, menu);
-        Intent intent = AppHelper.getSettingsIntent(module.packageName, pm);
+        Intent intent = AppHelper.getSettingsIntent(module.packageName, module.userId, pm);
         if (intent == null) {
             menu.removeItem(R.id.menu_launch);
         }
@@ -365,11 +372,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
         boolean android = appInfo.packageName.equals("android");
         CharSequence appName;
         int userId = appInfo.applicationInfo.uid / 100000;
-        if (userId != 0) {
-            appName = String.format("%s (%s)", appInfo.label, userId);
-        } else {
-            appName = android ? activity.getString(R.string.android_framework) : appInfo.label;
-        }
+        appName = android ? activity.getString(R.string.android_framework) : appInfo.label;
         holder.appName.setText(appName);
         GlideApp.with(holder.appIcon)
                 .load(appInfo.packageInfo)
@@ -412,13 +415,9 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
         holder.itemView.setOnCreateContextMenuListener((menu, v, menuInfo) -> {
             activity.getMenuInflater().inflate(R.menu.menu_app_item, menu);
             menu.setHeaderTitle(appName);
-            Intent launchIntent = pm.getLaunchIntentForPackage(appInfo.packageName);
+            Intent launchIntent = AppHelper.getIntentForCategory(appInfo.packageName, userId, pm, Intent.CATEGORY_LAUNCHER);
             if (launchIntent == null) {
                 menu.removeItem(R.id.menu_launch);
-            }
-            if (userId != 0) {
-                menu.removeItem(R.id.menu_launch);
-                menu.removeItem(R.id.menu_app_info);
             }
             if (android) {
                 menu.findItem(R.id.menu_force_stop).setTitle(R.string.reboot);
@@ -612,6 +611,22 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
             showList.addAll((Collection<AppInfo>) results.values);
             notifyDataSetChanged();
         }
+    }
+
+    public SearchView.OnQueryTextListener getSearchListener() {
+        return new SearchView.OnQueryTextListener() {
+            @Override
+            public boolean onQueryTextSubmit(String query) {
+                refresh(false);
+                return true;
+            }
+
+            @Override
+            public boolean onQueryTextChange(String newText) {
+                refresh(false);
+                return true;
+            }
+        };
     }
 
     public boolean onBackPressed() {

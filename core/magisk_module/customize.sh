@@ -43,6 +43,7 @@ extract "$ZIPFILE" 'util_functions.sh' "$TMPDIR"
 . "$TMPDIR/util_functions.sh"
 check_android_version
 check_magisk_version
+check_incompatible_module
 
 # Extract riru.sh
 extract "$ZIPFILE" 'riru.sh' "$TMPDIR"
@@ -68,7 +69,7 @@ extract "$ZIPFILE" 'sepolicy.rule'      "$MODPATH"
 extract "$ZIPFILE" 'post-fs-data.sh'    "$MODPATH"
 extract "$ZIPFILE" 'uninstall.sh'       "$MODPATH"
 extract "$ZIPFILE" 'framework/lspd.dex' "$MODPATH"
-extract "$ZIPFILE" 'manager.apk'        '/data/adb/lspd/'
+extract "$ZIPFILE" 'manager.apk'        '/data/adb/lspd'
 
 mkdir "$MODPATH/riru"
 mkdir "$MODPATH/riru/lib"
@@ -110,10 +111,6 @@ if [ -f /data/adb/lspd/misc_path ]; then
   # read current MISC_PATH
   MISC_PATH=$(cat /data/adb/lspd/misc_path)
   ui_print "  - Use previous path $MISC_PATH"
-elif [ -f /data/adb/edxp/misc_path ]; then
-  ui_print "  - WARNING: This installation will disable EdXposed because of incompatibility"
-  touch "$(magisk --path)/.magisk/modules/riru_edxposed/disable"
-  touch "$(magisk --path)/.magisk/modules/riru_edxposed_sandhook/disable"
 else
   # generate random MISC_PATH
   MISC_RAND=$(tr -cd 'A-Za-z0-9' </dev/urandom | head -c16)
