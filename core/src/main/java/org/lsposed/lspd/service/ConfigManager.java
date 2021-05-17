@@ -23,6 +23,7 @@ import static org.lsposed.lspd.service.ServiceManager.TAG;
 
 import android.content.ContentValues;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteStatement;
@@ -62,12 +63,12 @@ import java.util.concurrent.ConcurrentHashMap;
 // This config manager assume uid won't change when our service is off.
 // Otherwise, user should maintain it manually.
 public class ConfigManager {
+    public static final int PER_USER_RANGE = 100000;
+
     private static final String[] MANAGER_PERMISSIONS_TO_GRANT = new String[]{
             "android.permission.INTERACT_ACROSS_USERS",
             "android.permission.WRITE_SECURE_SETTINGS"
     };
-
-    private static final int PER_USER_RANGE = 100000;
 
     static ConfigManager instance = null;
 
@@ -314,7 +315,7 @@ public class ConfigManager {
             while (cursor.moveToNext()) {
                 String packageName = cursor.getString(pkgNameIdx);
                 try {
-                    PackageInfo pkgInfo = PackageService.getPackageInfoFromAllUsers(packageName, 0);
+                    PackageInfo pkgInfo = PackageService.getPackageInfoFromAllUsers(packageName, PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES);
                     if (pkgInfo != null && pkgInfo.applicationInfo != null) {
                         cachedModule.put(pkgInfo.applicationInfo.uid % PER_USER_RANGE, pkgInfo.packageName);
                     } else {
@@ -393,6 +394,10 @@ public class ConfigManager {
         return !cachedScope.containsKey(scope) && !isManager(scope.uid);
     }
 
+    public boolean isUidHooked(int uid) {
+        return cachedScope.keySet().stream().reduce(false, (p, scope) -> p || scope.uid == uid, Boolean::logicalOr);
+    }
+
     // This should only be called by manager, so we don't need to cache it
     public List<Application> getModuleScope(String packageName) {
         int mid = getModuleId(packageName);
@@ -427,8 +432,11 @@ public class ConfigManager {
         if (count < 0) {
             count = db.updateWithOnConflict("modules", values, "module_pkg_name=?", new String[]{packageName}, SQLiteDatabase.CONFLICT_IGNORE);
         }
-        // Called by oneway binder
-        updateCaches(true);
+        if (count > 0) {
+            // Called by oneway binder
+            updateCaches(true);
+            return true;
+        }
         return count >= 0;
     }
 
@@ -489,11 +497,11 @@ public class ConfigManager {
         }
     }
 
-    public boolean removeModule(String packageName) {
-        boolean res = removeModuleWithoutCache(packageName);
-        // called by oneway binder
-        updateCaches(true);
-        return res;
+    public void removeModule(String packageName) {
+        if (removeModuleWithoutCache(packageName)) {
+            // called by oneway binder
+            updateCaches(true);
+        }
     }
 
     private boolean removeModuleWithoutCache(String packageName) {
@@ -545,11 +553,9 @@ public class ConfigManager {
         return true;
     }
 
-    public boolean removeApp(Application app) {
-        boolean res = removeAppWithoutCache(app);
+    public void updateAppCache() {
         // Called by oneway binder
-        updateCaches(true);
-        return res;
+        cacheScopes();
     }
 
     private boolean removeAppWithoutCache(Application app) {
@@ -616,13 +622,9 @@ public class ConfigManager {
         return uid == managerUid;
     }
 
-    public String getCachePath(String fileName) {
-        return miscPath + File.separator + "cache" + File.separator + fileName;
-    }
-
     public String getPrefsPath(String fileName, int uid) {
-        int userId = uid % PER_USER_RANGE;
-        return miscPath + File.separator + "prefs" + (userId == 0 ? "" : String.valueOf(userId)) + File.separator + fileName + File.separator;
+        int userId = uid / PER_USER_RANGE;
+        return miscPath + File.separator + "prefs" + (userId == 0 ? "" : String.valueOf(userId)) + File.separator + fileName;
     }
 
     public static void grantManagerPermission() {
@@ -638,6 +640,10 @@ public class ConfigManager {
 
     public boolean isModule(int uid) {
         return cachedModule.containsKey(uid % PER_USER_RANGE);
+    }
+
+    public boolean isModule(String packageName) {
+        return cachedModule.containsValue(packageName);
     }
 
     private void recursivelyChown(File file, int uid, int gid) throws ErrnoException {

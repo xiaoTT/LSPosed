@@ -85,7 +85,11 @@
     <string name="module_uninstall_message">Do you want to uninstall this module?</string>
     <string name="module_uninstalled">Uninstalled %1$s</string>
     <string name="module_uninstall_failed">Uninstall unsuccessful</string>
+    <string name="module_installed">Added %1$s to user %2$d</string>
+    <string name="module_install_failed">Adding module failed</string>
     <string name="user_title">User %d</string>
+    <string name="install_to_user">Install to user %d</string>
+    <string name="install_to_user_message">Want to install %1$s to user %2$d? It is recommended to install manually, forcing installation via LSPosed may cause problems.</string>
 
     <!-- AppListActivity -->
     <string name="compile_speed">Re-optimize</string>
@@ -127,7 +131,7 @@
     <string name="menu_filter">Filter…</string>
 
     <!-- ModulesActivity and AppListActivity -->
-    <string name="modules_app_store">View in App Store</string>
+    <string name="modules_other_app">View in other app</string>
     <string name="module_app_info">App info</string>
 
     <!-- SettingsActivity -->
@@ -154,7 +158,8 @@
     <string name="theme_color">Theme color</string>
     <string name="theme_color_summary">Color that appears most frequently in the app</string>
     <string name="theme_color_system_accent">System accent color</string>
-    <string name="settings_show_hidden_icon_apps_enabled">(Android 10+) Limit apps to hide their launcher icons</string>
+    <string name="settings_show_hidden_icon_apps_enabled">Force apps to show launcher icons</string>
+    <string name="settings_show_hidden_icon_apps_enabled_summary">After Android 10, apps (especially Xposed modules) are not allowed to hide their launcher icons. Turn off the toggle to disable this feature.</string>
     <string name="settings_group_system">System</string>
 
     <!-- Module Repo -->
@@ -180,4 +185,5 @@
     <string name="translators"><![CDATA[<a href="https://github.com/LSPosed/LSPosed">LSPosed</a>]]></string>
     <string name="copy_toast_msg">Copied</string>
     <string name="list_empty">¯\\\\_(ツ)_\/¯\nNothing here</string>
+    <string name="add_module_to_user">Add module to user</string>
 </resources>

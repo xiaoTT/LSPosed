@@ -148,9 +148,11 @@ public class LSPManagerService extends ILSPManagerService.Stub {
     }
 
     @Override
-    public boolean uninstallPackage(String packageName) throws RemoteException {
+    public boolean uninstallPackage(String packageName, int userId) throws RemoteException {
         try {
-            return PackageService.uninstallPackage(new VersionedPackage(packageName, PackageManager.VERSION_CODE_HIGHEST));
+            if (ActivityManagerService.startUserInBackground(userId))
+                return PackageService.uninstallPackage(new VersionedPackage(packageName, PackageManager.VERSION_CODE_HIGHEST), userId);
+            else return false;
         } catch (InterruptedException | InvocationTargetException | NoSuchMethodException | InstantiationException | IllegalAccessException e) {
             Log.e(TAG, e.getMessage(), e);
             return false;
@@ -165,5 +167,17 @@ public class LSPManagerService extends ILSPManagerService.Stub {
     @Override
     public int[] getUsers() throws RemoteException {
         return UserService.getUsers();
+    }
+
+    @Override
+    public int installExistingPackageAsUser(String packageName, int userId) {
+        try {
+            if (ActivityManagerService.startUserInBackground(userId))
+                return PackageService.installExistingPackageAsUser(packageName, userId);
+            else return PackageService.INSTALL_FAILED_INTERNAL_ERROR;
+        } catch (Throwable e) {
+            Log.w(TAG, "install existing package as user: ", e);
+            return PackageService.INSTALL_FAILED_INTERNAL_ERROR;
+        }
     }
 }
