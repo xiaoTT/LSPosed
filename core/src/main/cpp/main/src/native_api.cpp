@@ -97,10 +97,10 @@ namespace lspd {
                 for (std::string_view module_lib: moduleNativeLibs) {
                     // the so is a module so
                     if (hasEnding(ns, module_lib)) [[unlikely]] {
-                        LOGI("Loading module native library %s", module_lib.data());
+                        LOGD("Loading module native library %s", module_lib.data());
                         void *native_init_sym = dlsym(handle, "native_init");
                         if (native_init_sym == nullptr) [[unlikely]] {
-                            LOGE("Failed to get symbol \"native_init\" from library %s",
+                            LOGD("Failed to get symbol \"native_init\" from library %s",
                                  module_lib.data());
                             break;
                         }

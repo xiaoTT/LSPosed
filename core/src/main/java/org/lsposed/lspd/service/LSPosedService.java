@@ -94,6 +94,7 @@ public class LSPosedService extends ILSPosedService.Stub {
                     ConfigManager.getInstance().removeModule(moduleName);
                 break;
             }
+            case Intent.ACTION_PACKAGE_ADDED:
             case Intent.ACTION_PACKAGE_CHANGED: {
                 // make sure that the change is for the complete package, not only a
                 // component
@@ -114,7 +115,10 @@ public class LSPosedService extends ILSPosedService.Stub {
             case Intent.ACTION_UID_REMOVED: {
                 // when a package is removed (rather than hide) for a single user
                 // (apk may still be there because of multi-user)
-                if (ConfigManager.getInstance().isUidHooked(uid)) {
+                if (ConfigManager.getInstance().isModule(uid)) {
+                    // it will automatically remove obsolete scope from database
+                    ConfigManager.getInstance().updateCache();
+                } else if (ConfigManager.getInstance().isUidHooked(uid)) {
                     // it will automatically remove obsolete app from database
                     ConfigManager.getInstance().updateAppCache();
                 }

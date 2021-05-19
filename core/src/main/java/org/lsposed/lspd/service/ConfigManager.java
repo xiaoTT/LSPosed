@@ -23,7 +23,6 @@ import static org.lsposed.lspd.service.ServiceManager.TAG;
 
 import android.content.ContentValues;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteStatement;
@@ -50,13 +49,19 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
+import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -74,6 +79,7 @@ public class ConfigManager {
 
     private static final File basePath = new File("/data/adb/lspd");
     private static final File configPath = new File(basePath, "config");
+    private static final File lockPath = new File(basePath, "lock");
     private static final SQLiteDatabase db = SQLiteDatabase.openOrCreateDatabase(new File(configPath, "modules_config.db"), null);
 
     boolean packageStarted = false;
@@ -95,6 +101,15 @@ public class ConfigManager {
     private static final File modulesLog = new File(logPath, "modules.log");
     private static final File oldModulesLog = new File(logPath, "modules.old.log");
     private static final File verboseLogPath = new File(logPath, "all.log");
+    private static FileLock locker = null;
+
+    static {
+        try {
+            Files.createDirectories(basePath.toPath());
+        } catch (IOException e) {
+            Log.e(TAG, Log.getStackTraceString(e));
+        }
+    }
 
     private final Handler cacheHandler;
 
@@ -160,6 +175,22 @@ public class ConfigManager {
         } else {
             cacheHandler.post(this::cacheModules);
             cacheHandler.post(this::cacheScopes);
+        }
+    }
+
+    public boolean tryLock() {
+        var openOptions = new HashSet<OpenOption>();
+        openOptions.add(StandardOpenOption.CREATE);
+        openOptions.add(StandardOpenOption.WRITE);
+        var p = PosixFilePermissions.fromString("rw-------");
+        var permissions = PosixFilePermissions.asFileAttribute(p);
+
+        try {
+            var lockChannel = FileChannel.open(lockPath.toPath(), openOptions, permissions);
+            locker = lockChannel.tryLock();
+            return locker != null && locker.isValid();
+        } catch (Throwable e) {
+            return false;
         }
     }
 
@@ -304,29 +335,45 @@ public class ConfigManager {
         if (lastModuleCacheTime >= requestModuleCacheTime) return;
         else lastModuleCacheTime = SystemClock.elapsedRealtime();
         cachedModule.clear();
-        try (Cursor cursor = db.query("modules", new String[]{"module_pkg_name"},
-                "enabled = 1", null, null, null, null)) {
+        try (Cursor cursor = db.query(true, "modules INNER JOIN scope ON scope.mid = modules.mid", new String[]{"module_pkg_name", "user_id"},
+                "enabled = 1", null, null, null, null, null)) {
             if (cursor == null) {
                 Log.e(TAG, "db cache failed");
                 return;
             }
             int pkgNameIdx = cursor.getColumnIndex("module_pkg_name");
-            HashSet<String> obsoleteModules = new HashSet<>();
+            int userIdIdx = cursor.getColumnIndex("user_id");
+            Map<String, Map<Integer, PackageInfo>> modules = new HashMap<>();
+            Set<String> obsoleteModules = new HashSet<>();
+            Set<Application> obsoleteScopes = new HashSet<>();
             while (cursor.moveToNext()) {
                 String packageName = cursor.getString(pkgNameIdx);
-                try {
-                    PackageInfo pkgInfo = PackageService.getPackageInfoFromAllUsers(packageName, PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES);
-                    if (pkgInfo != null && pkgInfo.applicationInfo != null) {
-                        cachedModule.put(pkgInfo.applicationInfo.uid % PER_USER_RANGE, pkgInfo.packageName);
-                    } else {
-                        obsoleteModules.add(packageName);
+                int userId = cursor.getInt(userIdIdx);
+                var pkgInfo = modules.computeIfAbsent(packageName, m -> {
+                    try {
+                        return PackageService.getPackageInfoFromAllUsers(m, 0);
+                    } catch (Throwable e) {
+                        Log.e(TAG, Log.getStackTraceString(e));
+                        return Collections.emptyMap();
                     }
-                } catch (RemoteException e) {
-                    Log.e(TAG, Log.getStackTraceString(e));
+                });
+                if (pkgInfo.isEmpty()) {
+                    obsoleteModules.add(packageName);
+                } else if (!pkgInfo.containsKey(userId)) {
+                    var module = new Application();
+                    module.packageName = packageName;
+                    module.userId = userId;
+                    obsoleteScopes.add(module);
+                } else {
+                    var info = pkgInfo.get(userId);
+                    cachedModule.computeIfAbsent(info.applicationInfo.uid % PER_USER_RANGE, k -> info.packageName);
                 }
             }
-            for (String obsoleteModule : obsoleteModules) {
+            for (var obsoleteModule : obsoleteModules) {
                 removeModuleWithoutCache(obsoleteModule);
+            }
+            for (var obsoleteScope : obsoleteScopes) {
+                removeModuleScopeWithoutCache(obsoleteScope);
             }
         }
         Log.d(TAG, "cached modules");
@@ -518,6 +565,19 @@ public class ConfigManager {
         return true;
     }
 
+    private boolean removeModuleScopeWithoutCache(Application module) {
+        int mid = getModuleId(module.packageName);
+        if (mid == -1) return false;
+        try {
+            db.beginTransaction();
+            db.delete("scope", "mid = ? and user_id = ?", new String[]{String.valueOf(mid), String.valueOf(module.userId)});
+        } finally {
+            db.setTransactionSuccessful();
+            db.endTransaction();
+        }
+        return true;
+    }
+
     public boolean disableModule(String packageName) {
         int mid = getModuleId(packageName);
         if (mid == -1) return false;
@@ -551,6 +611,11 @@ public class ConfigManager {
         // Called by manager, should be async
         updateCaches(false);
         return true;
+    }
+
+    public void updateCache() {
+        // Called by oneway binder
+        updateCaches(true);
     }
 
     public void updateAppCache() {
