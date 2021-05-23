@@ -35,7 +35,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
-import android.os.UserHandle;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
@@ -86,6 +85,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import rikka.core.res.ResourcesKt;
 import rikka.widget.switchbar.SwitchBar;
@@ -100,11 +100,10 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
     private final ModuleUtil moduleUtil;
 
     private final ModuleUtil.InstalledModule module;
-    private final UserHandle userHandle;
 
     private final HashSet<ApplicationWithEquals> recommendedList = new HashSet<>();
     private final HashSet<ApplicationWithEquals> checkedList = new HashSet<>();
-    private final List<AppInfo> searchList = new ArrayList<>();
+    private final ConcurrentLinkedQueue<AppInfo> searchList = new ConcurrentLinkedQueue<>();
     private final List<AppInfo> showList = new ArrayList<>();
 
     private final SwitchBar.OnCheckedChangeListener switchBarOnCheckedChangeListener = new SwitchBar.OnCheckedChangeListener() {
@@ -135,10 +134,9 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
     private boolean refreshing = false;
     private boolean enabled = true;
 
-    public ScopeAdapter(AppListActivity activity, ModuleUtil.InstalledModule module, UserHandle userHandle) {
+    public ScopeAdapter(AppListActivity activity, ModuleUtil.InstalledModule module) {
         this.activity = activity;
         this.module = module;
-        this.userHandle = userHandle;
         moduleUtil = ModuleUtil.getInstance();
         HandlerThread handlerThread = new HandlerThread("appList");
         handlerThread.start();
@@ -154,15 +152,6 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
     }
 
     private boolean shouldHideApp(PackageInfo info, ApplicationWithEquals app) {
-        if (app.userId != module.userId) {
-            return true;
-        }
-        if (info.packageName.equals(this.module.packageName)) {
-            return true;
-        }
-        if (info.packageName.equals(BuildConfig.APPLICATION_ID)) {
-            return true;
-        }
         if (info.packageName.equals("android")) {
             return false;
         }
@@ -257,9 +246,9 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
             item.setChecked(!item.isChecked());
             preferences.edit().putBoolean("filter_modules", item.isChecked()).apply();
         } else if (itemId == R.id.menu_launch) {
-            Intent launchIntent = AppHelper.getSettingsIntent(module.packageName, module.userId, pm);
+            Intent launchIntent = AppHelper.getSettingsIntent(module.packageName, module.userId);
             if (launchIntent != null) {
-                AppHelper.startActivityAsUser(activity, launchIntent, userHandle);
+                ConfigManager.startActivityAsUserWithFeature(launchIntent, module.userId);
             } else {
                 activity.makeSnackBar(R.string.module_no_ui, Snackbar.LENGTH_LONG);
             }
@@ -290,9 +279,9 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
         }
         int itemId = item.getItemId();
         if (itemId == R.id.menu_launch) {
-            Intent launchIntent = pm.getLaunchIntentForPackage(info.packageName);
+            Intent launchIntent = AppHelper.getLaunchIntentForPackage(info.packageName, info.uid / 100000);
             if (launchIntent != null) {
-                AppHelper.startActivityAsUser(activity, launchIntent, userHandle);
+                ConfigManager.startActivityAsUserWithFeature(launchIntent, module.userId);
             }
         } else if (itemId == R.id.menu_compile_speed) {
             CompileDialogFragment.speed(activity.getSupportFragmentManager(), info);
@@ -306,7 +295,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
                 e.printStackTrace();
             }
         } else if (itemId == R.id.menu_app_info) {
-            AppHelper.startActivityAsUser(activity, new Intent(ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", info.packageName, null)), userHandle);
+            ConfigManager.startActivityAsUserWithFeature(new Intent(ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", info.packageName, null)), module.userId);
         } else if (itemId == R.id.menu_force_stop) {
             if (info.packageName.equals("android")) {
                 ConfigManager.reboot(false, null, false);
@@ -326,7 +315,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
 
     public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
         inflater.inflate(R.menu.menu_app_list, menu);
-        Intent intent = AppHelper.getSettingsIntent(module.packageName, module.userId, pm);
+        Intent intent = AppHelper.getSettingsIntent(module.packageName, module.userId);
         if (intent == null) {
             menu.removeItem(R.id.menu_launch);
         }
@@ -415,7 +404,7 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
         holder.itemView.setOnCreateContextMenuListener((menu, v, menuInfo) -> {
             activity.getMenuInflater().inflate(R.menu.menu_app_item, menu);
             menu.setHeaderTitle(appName);
-            Intent launchIntent = AppHelper.getIntentForCategory(appInfo.packageName, userId, pm, Intent.CATEGORY_LAUNCHER);
+            Intent launchIntent = AppHelper.getLaunchIntentForPackage(appInfo.packageName, userId);
             if (launchIntent == null) {
                 menu.removeItem(R.id.menu_launch);
             }
@@ -504,30 +493,34 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
             List<PackageInfo> appList = AppHelper.getAppList((Boolean) msg.obj);
             checkedList.clear();
             recommendedList.clear();
-            searchList.clear();
-
+            var tmpList = new ArrayList<AppInfo>();
             checkedList.addAll(ConfigManager.getModuleScope(module.packageName));
             HashSet<ApplicationWithEquals> installedList = new HashSet<>();
             List<String> scopeList = module.getScopeList();
             boolean emptyCheckedList = checkedList.isEmpty();
             for (PackageInfo info : appList) {
-                int uid = info.applicationInfo.uid;
-                if (info.packageName.equals("android") && uid / 100000 != 0) {
+                int userId = info.applicationInfo.uid / 100000;
+                String packageName = info.packageName;
+                if (packageName.equals("android") && userId != 0 ||
+                        packageName.equals(module.packageName) ||
+                        packageName.equals(BuildConfig.APPLICATION_ID)) {
                     continue;
                 }
 
-                ApplicationWithEquals application = new ApplicationWithEquals(info.packageName, uid / 100000);
+                ApplicationWithEquals application = new ApplicationWithEquals(packageName, userId);
 
                 installedList.add(application);
 
-                if (scopeList != null && scopeList.contains(info.packageName)) {
+                if (userId != module.userId) {
+                    continue;
+                }
+
+                if (scopeList != null && scopeList.contains(packageName)) {
                     recommendedList.add(application);
                     if (emptyCheckedList) {
                         checkedList.add(application);
                     }
-                }
-
-                if (shouldHideApp(info, application)) {
+                } else if (shouldHideApp(info, application)) {
                     continue;
                 }
 
@@ -537,13 +530,15 @@ public class ScopeAdapter extends RecyclerView.Adapter<ScopeAdapter.ViewHolder> 
                 appInfo.application = application;
                 appInfo.packageName = info.packageName;
                 appInfo.applicationInfo = info.applicationInfo;
-                searchList.add(appInfo);
+                tmpList.add(appInfo);
             }
             checkedList.retainAll(installedList);
             if (emptyCheckedList) {
                 ConfigManager.setModuleScope(module.packageName, checkedList);
             }
-            sortApps(searchList);
+            sortApps(tmpList);
+            searchList.clear();
+            searchList.addAll(tmpList);
             synchronized (dataReadyRunnable) {
                 synchronized (this) {
                     refreshing = false;

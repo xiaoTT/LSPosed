@@ -187,7 +187,7 @@ dependencies {
     implementation("androidx.activity:activity:1.2.3")
     implementation("androidx.browser:browser:1.3.0")
     implementation("androidx.constraintlayout:constraintlayout:2.0.4")
-    implementation("androidx.core:core:1.3.2")
+    implementation("androidx.core:core:1.5.0")
     implementation("androidx.fragment:fragment:1.3.4")
     implementation("androidx.recyclerview:recyclerview:1.2.0")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
@@ -219,7 +219,7 @@ dependencies {
     implementation("io.noties.markwon:linkify:$markwonVersion")
     implementation("me.zhanghai.android.appiconloader:appiconloader-glide:1.3.1")
     implementation("me.zhanghai.android.fastscroll:library:1.1.5")
-    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:1.1")
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:2.0")
     implementation(project(":manager-service"))
 }
 

@@ -25,7 +25,6 @@
 #include <dl_util.h>
 #include <art/runtime/jni_env_ext.h>
 #include <dobby.h>
-#include "utils.h"
 #include "symbol_cache.h"
 #include "logging.h"
 #include "native_api.h"
@@ -55,9 +54,7 @@ namespace lspd {
         installed = true;
         LOGI("Start to install inline hooks");
         InstallRiruHooks();
-        // install ART hooks
         InstallArtHooks(handle_libart);
-//        InstallNativeAPI();
     }
 
     void InstallArtHooks(void *art_handle) {
