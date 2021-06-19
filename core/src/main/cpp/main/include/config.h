@@ -60,6 +60,7 @@ namespace lspd {
 
     inline static constexpr auto kEntryClassName = "org.lsposed.lspd.core.Main"_tstr;
     inline static constexpr auto kClassLinkerClassName = "org.lsposed.lspd.nativebridge.ClassLinker"_tstr;
+    inline static constexpr auto kClassLinkerClassNameSlash = "org/lsposed/lspd/nativebridge/ClassLinker"_tstr;
     inline static constexpr auto kBridgeServiceClassName = "org.lsposed.lspd.service.BridgeService"_tstr;
     inline static constexpr auto kDexPath = "framework/lspd.dex"_tstr;
 
@@ -71,5 +72,5 @@ namespace lspd {
     }
 
     extern const int versionCode;
-    extern const char* const versionName;
+    extern const char *const versionName;
 }

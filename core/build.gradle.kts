@@ -17,8 +17,8 @@
  * Copyright (C) 2021 LSPosed Contributors
  */
 
-import com.android.build.api.variant.impl.ApplicationVariantImpl
-import com.android.build.api.component.analytics.AnalyticsEnabledApplicationVariant
+import com.android.build.api.variant.impl.LibraryVariantImpl
+import com.android.build.api.component.analytics.AnalyticsEnabledLibraryVariant
 import com.android.build.gradle.BaseExtension
 import com.android.ide.common.signing.KeystoreHelper
 import org.apache.tools.ant.filters.FixCrLfFilter
@@ -28,7 +28,7 @@ import java.io.PrintStream
 import java.security.MessageDigest
 
 plugins {
-    id("com.android.application")
+    id("com.android.library")
     kotlin("android")
 }
 
@@ -59,7 +59,7 @@ val verName: String by rootProject.extra
 dependencies {
     implementation("dev.rikka.ndk:riru:${moduleMinRiruVersionName}")
     implementation("dev.rikka.ndk.thirdparty:cxx:1.1.0")
-    implementation("com.android.tools.build:apksig:7.0.0-beta03")
+    implementation("com.android.tools.build:apksig:7.0.0-beta04")
     implementation("org.apache.commons:commons-lang3:3.12.0")
     implementation("de.upb.cs.swt:axml:2.1.1")
     compileOnly(project(":hiddenapi-stubs"))
@@ -79,11 +79,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.lsposed.lspd"
         minSdk = androidMinSdkVersion
         targetSdk = androidTargetSdkVersion
-        versionCode = verCode
-        versionName = verName
         multiDexEnabled = false
 
         externalNativeBuild {
@@ -115,6 +112,8 @@ android {
 
         buildConfigField("int", "API_CODE", "$apiCode")
         buildConfigField("String", "DEFAULT_MANAGER_PACKAGE_NAME", "\"$defaultManagerPackageName\"")
+        buildConfigField("int", "VERSION_CODE", "$verCode")
+        buildConfigField("String", "VERSION_NAME", "\"$verName\"")
     }
 
     lint {
@@ -184,9 +183,9 @@ android {
 }
 
 androidComponents.onVariants { v ->
-    val variant: ApplicationVariantImpl =
-        if (v is ApplicationVariantImpl) v
-        else (v as AnalyticsEnabledApplicationVariant).delegate as ApplicationVariantImpl
+    val variant: LibraryVariantImpl =
+        if (v is LibraryVariantImpl) v
+        else (v as AnalyticsEnabledLibraryVariant).delegate as LibraryVariantImpl
     val variantCapped = variant.name.capitalize()
     val variantLowered = variant.name.toLowerCase()
     val zipFileName = "$moduleName-$verName-$verCode-$variantLowered.zip"

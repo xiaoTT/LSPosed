@@ -23,6 +23,7 @@
 #include "jni/art_class_linker.h"
 #include "jni/yahfa.h"
 #include "jni/resources_hook.h"
+#include "jni/bypass_sig.h"
 #include <art/runtime/jni_env_ext.h>
 #include "jni/pending_hooks.h"
 #include "context.h"
@@ -119,6 +120,30 @@ namespace lspd {
         RegisterYahfa(env);
         RegisterPendingHooks(env);
         RegisterNativeAPI(env);
+    }
+
+    void Context::InitLess(JNIEnv* env) {
+        env->GetJavaVM(&vm_);
+        InitSymbolCache();
+        InstallInlineHooks();
+        auto cls = env->FindClass(kClassLinkerClassNameSlash.c_str());
+        class_linker_class_ = (jclass) env->NewGlobalRef(cls);
+        auto gclMethodId = env->GetMethodID(env->GetObjectClass(cls), "getClassLoader", "()Ljava/lang/ClassLoader;");
+        inject_class_loader_ = env->NewGlobalRef(env->CallObjectMethod(cls, gclMethodId));
+        post_fixup_static_mid_ = JNI_GetStaticMethodID(env, class_linker_class_,
+                "onPostFixupStaticTrampolines",
+                "(Ljava/lang/Class;)V");
+
+        // entry_class_ = (jclass) (env->NewGlobalRef(
+        //         FindClassFromLoader(env, GetCurrentClassLoader(), kEntryClassName)));
+
+        // RegisterLogger(env);
+        // RegisterResourcesHook(env);
+        RegisterArtClassLinker(env);
+        RegisterYahfa(env);
+        RegisterPendingHooks(env);
+        RegisterNativeAPI(env);
+        RegisterBypass(env);
     }
 
     ScopedLocalRef<jclass>
