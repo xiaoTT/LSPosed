@@ -31,6 +31,8 @@
 #include "jni/native_api.h"
 #include "service.h"
 #include "symbol_cache.h"
+#include "android/asset_manager.h"
+#include "android/asset_manager_jni.h"
 
 namespace lspd {
     extern int *allowUnload;
@@ -122,28 +124,27 @@ namespace lspd {
         RegisterNativeAPI(env);
     }
 
-    void Context::InitLess(JNIEnv* env) {
-        env->GetJavaVM(&vm_);
+    void Context::InitLess(JNIEnv *env) {
         InitSymbolCache();
         InstallInlineHooks();
-        auto cls = env->FindClass(kClassLinkerClassNameSlash.c_str());
-        class_linker_class_ = (jclass) env->NewGlobalRef(cls);
-        auto gclMethodId = env->GetMethodID(env->GetObjectClass(cls), "getClassLoader", "()Ljava/lang/ClassLoader;");
-        inject_class_loader_ = env->NewGlobalRef(env->CallObjectMethod(cls, gclMethodId));
-        post_fixup_static_mid_ = JNI_GetStaticMethodID(env, class_linker_class_,
-                "onPostFixupStaticTrampolines",
-                "(Ljava/lang/Class;)V");
 
-        // entry_class_ = (jclass) (env->NewGlobalRef(
-        //         FindClassFromLoader(env, GetCurrentClassLoader(), kEntryClassName)));
+        auto stub = env->FindClass("org/lsposed/lspatch/appstub/LSPApplicationStub");
+        auto dex_field = env->GetStaticFieldID(stub, "dex", "[B");
 
-        // RegisterLogger(env);
-        // RegisterResourcesHook(env);
-        RegisterArtClassLinker(env);
-        RegisterYahfa(env);
-        RegisterPendingHooks(env);
-        RegisterNativeAPI(env);
-        RegisterBypass(env);
+        auto array = (jbyteArray) env->GetStaticObjectField(stub, dex_field);
+        dex.resize(env->GetArrayLength(array));
+        memcpy(dex.data(), env->GetByteArrayElements(array, nullptr), dex.size());
+
+        LoadDex(env);
+
+        Init(env);
+
+        if (auto entry_class = FindClassFromLoader(env, GetCurrentClassLoader(),
+                                                   "org.lsposed.lspatch.loader.LSPApplication")) {
+            entry_class_ = JNI_NewGlobalRef(env, entry_class);
+        }
+
+        FindAndCall(env, "onLoad", "()V");
     }
 
     ScopedLocalRef<jclass>
