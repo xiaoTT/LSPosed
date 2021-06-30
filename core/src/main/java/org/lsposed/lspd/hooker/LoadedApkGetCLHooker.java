@@ -85,7 +85,7 @@ public class LoadedApkGetCLHooker extends XC_MethodHook {
             lpparam.appInfo = loadedApk.getApplicationInfo();
             lpparam.isFirstApplication = this.isFirstApplication;
 
-            IBinder moduleBinder = serviceClient.requestModuleBinder();
+            IBinder moduleBinder = serviceClient.requestModuleBinder(lpparam.packageName);
             if (moduleBinder != null) {
                 hookNewXSP(lpparam);
             }
