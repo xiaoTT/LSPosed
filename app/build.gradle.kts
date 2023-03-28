@@ -173,7 +173,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     implementation(projects.services.managerService)
 
-    val appCenter = "5.0.0"
+    val appCenter = "5.0.1"
     debugImplementation("com.microsoft.appcenter:appcenter-crashes:${appCenter}")
     debugImplementation("com.microsoft.appcenter:appcenter-analytics:${appCenter}")
 }
